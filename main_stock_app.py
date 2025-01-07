@@ -17,14 +17,38 @@ end_date = st.sidebar.date_input("End Date", pd.to_datetime("2024-12-31"))
 # News API Key
 NEWS_API_KEY = "364b5eac98da4a31ac519a8d67581444"
 
-# Function to clean column headers
-def clean_columns(data):
-    if isinstance(data.columns, pd.MultiIndex):  # Check for multi-level columns
-        data.columns = ['_'.join(col).strip() for col in data.columns.values]  # Flatten
+# Function to dynamically handle columns
+def extract_columns(data, stock_symbol):
+    """
+    Handles column names for single-stock or multi-stock DataFrames.
+    Dynamically renames key columns (Close, Open, High, Low, Volume).
+    """
+    if isinstance(data.columns, pd.MultiIndex):  # Multi-level columns
+        data.columns = ['_'.join(col).strip() for col in data.columns.values]
+    
+    # Identify columns dynamically based on stock symbol or default names
+    columns_mapping = {}
+    for col in data.columns:
+        if 'Close' in col and stock_symbol in col:
+            columns_mapping[col] = 'Close'
+        elif 'Open' in col and stock_symbol in col:
+            columns_mapping[col] = 'Open'
+        elif 'High' in col and stock_symbol in col:
+            columns_mapping[col] = 'High'
+        elif 'Low' in col and stock_symbol in col:
+            columns_mapping[col] = 'Low'
+        elif 'Volume' in col and stock_symbol in col:
+            columns_mapping[col] = 'Volume'
+
+    # Rename columns
+    data.rename(columns=columns_mapping, inplace=True)
     return data
 
 # Function to calculate technical indicators
 def calculate_indicators(data):
+    """
+    Adds Bollinger Bands and RSI indicators to the DataFrame.
+    """
     # Bollinger Bands
     data['SMA20'] = data['Close'].rolling(window=20).mean()
     data['Upper Band'] = data['SMA20'] + 2 * data['Close'].rolling(window=20).std()
@@ -43,6 +67,9 @@ def calculate_indicators(data):
 
 # Function for news sentiment analysis
 def fetch_news_sentiment(symbol):
+    """
+    Fetches sentiment data for the given stock symbol using NewsAPI.
+    """
     url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
     response = requests.get(url)
     sentiment = {"positive": 0, "neutral": 0, "negative": 0}
@@ -60,7 +87,7 @@ def fetch_news_sentiment(symbol):
     
     return sentiment
 
-# Analysis and Visualization
+# Main App Functionality
 if st.button("Run Analysis"):
     try:
         # Fetch stock data
@@ -70,10 +97,10 @@ if st.button("Run Analysis"):
             st.warning("No data found for the selected ticker and date range.")
             st.stop()
 
-        # Clean column headers
-        data = clean_columns(data)
+        # Clean and standardize columns
+        data = extract_columns(data, stock_symbol)
 
-        # Ensure the "Close" column is correctly accessed
+        # Ensure the "Close" column is present
         if "Close" not in data.columns:
             st.error(f"Expected 'Close' column not found in data for {stock_symbol}.")
             st.stop()
