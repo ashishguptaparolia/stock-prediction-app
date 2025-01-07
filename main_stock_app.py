@@ -45,7 +45,7 @@ def calculate_technical_indicators(data):
 
 # Function for news sentiment analysis
 def fetch_news_sentiment(symbol):
-    url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey=YOUR_API_KEY"
+    url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey=364b5eac98da4a31ac519a8d67581444"
     response = requests.get(url)
     sentiment = {"positive": 0, "neutral": 0, "negative": 0}
     
