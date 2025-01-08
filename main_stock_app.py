@@ -44,27 +44,35 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Function to calculate technical indicators
+# Corrected function to calculate technical indicators
 def calculate_technical_indicators(data):
     """
     Calculates Bollinger Bands, RSI, and Volatility.
     Handles cases where there are insufficient data points for rolling calculations.
     """
+    # Ensure there are enough rows for rolling calculations
+    if len(data) < 20:
+        raise ValueError("Not enough data to calculate technical indicators. At least 20 rows are required.")
+
+    # Calculate 20-day Simple Moving Average (SMA)
     data['SMA20'] = data['Close'].rolling(window=20).mean()
+
+    # Calculate rolling standard deviation for Bollinger Bands
     rolling_std = data['Close'].rolling(window=20).std()
 
-    # Bollinger Bands
+    # Calculate Bollinger Bands
     data['Upper Band'] = data['SMA20'] + 2 * rolling_std
     data['Lower Band'] = data['SMA20'] - 2 * rolling_std
 
-    # RSI
+    # Calculate RSI
     data['RSI'] = calculate_rsi(data)
 
-    # Volatility
+    # Calculate Volatility (Standard Deviation over 10 days)
     data['Volatility'] = data['Close'].rolling(window=10).std()
 
-    # Drop rows with NaN values
+    # Drop rows with NaN values (optional, for cleaner results)
     data.dropna(inplace=True)
+
     return data
 
 # Function to generate short-term insights
@@ -97,7 +105,11 @@ def main():
     st.write(data.tail())
 
     # Calculate technical indicators
-    data = calculate_technical_indicators(data)
+    try:
+        data = calculate_technical_indicators(data)
+    except ValueError as e:
+        st.error(e)
+        return
 
     # Plot Bollinger Bands
     st.subheader("Bollinger Bands and Trends")
