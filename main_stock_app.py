@@ -58,18 +58,25 @@ def calculate_rsi(data, window=14):
 def calculate_technical_indicators(data):
     # Ensure the DataFrame has enough rows
     if len(data) < 20:
-        raise ValueError("Not enough data to calculate technical indicators. At least 20 rows are required.")
+        raise ValueError("Not enough data to calculate Bollinger Bands. At least 20 rows are required.")
 
     # Ensure the 'Close' column exists
     if 'Close' not in data.columns:
         raise ValueError("The data does not contain a 'Close' column required for calculations.")
 
-    # Calculate technical indicators
-    data['SMA20'] = data['Close'].rolling(window=20).mean()
-    rolling_std = data['Close'].rolling(window=20).std()
-    data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
-    data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
-    data['RSI'] = calculate_rsi(data)
+    # Handle missing or NaN values in the 'Close' column
+    if data['Close'].isnull().any():
+        raise ValueError("The 'Close' column contains missing or NaN values. Please ensure the data is complete.")
+
+    # Calculate Bollinger Bands and RSI
+    try:
+        data['SMA20'] = data['Close'].rolling(window=20).mean()
+        rolling_std = data['Close'].rolling(window=20).std()
+        data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
+        data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
+        data['RSI'] = calculate_rsi(data)
+    except Exception as e:
+        raise ValueError(f"An error occurred during Bollinger Bands calculation: {e}")
 
     # Drop rows with NaN values resulting from rolling calculations
     data.dropna(inplace=True)
@@ -115,16 +122,20 @@ def generate_investment_calculator(data, investment_amount):
 
 # Main App Logic
 def main():
-    data = yf.download(symbol, period="1y", interval="1d")
-    if data.empty:
-        st.error(f"No data found for {symbol}. Please check the ticker symbol and try again.")
-        return
-
     try:
+        # Fetch data
+        data = yf.download(symbol, period="1y", interval="1d")
+        if data.empty:
+            st.error(f"No data found for {symbol}. Please check the ticker symbol and try again.")
+            return
+
         # Calculate technical indicators
         data = calculate_technical_indicators(data)
     except ValueError as e:
-        st.error(str(e))
+        st.error(f"Error: {e}")
+        return
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
         return
 
     # Bollinger Bands
