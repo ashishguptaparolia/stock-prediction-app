@@ -3,11 +3,11 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import time
 from datetime import datetime
+import time
 
 # App title
-st.title("Advanced Live Stock, Crypto, and Indian Stock Insights")
+st.title("Advanced Stock, Crypto, and Indian Stock Insights")
 
 # Sidebar inputs
 st.sidebar.header("Select Parameters")
@@ -36,15 +36,6 @@ def fetch_live_data(symbol):
         "change": (latest_row["Close"] - live_data.iloc[0]["Close"]) / live_data.iloc[0]["Close"] * 100
     }
 
-# Function to calculate technical indicators
-def calculate_technical_indicators(data):
-    data['SMA20'] = data['Close'].rolling(window=20).mean()
-    data['Upper Band'] = data['SMA20'] + 2 * data['Close'].rolling(window=20).std()
-    data['Lower Band'] = data['SMA20'] - 2 * data['Close'].rolling(window=20).std()
-    data['RSI'] = calculate_rsi(data)
-    data['Volatility'] = data['Close'].rolling(window=10).std()
-    return data
-
 # Function to calculate RSI
 def calculate_rsi(data, window=14):
     delta = data['Close'].diff()
@@ -52,6 +43,29 @@ def calculate_rsi(data, window=14):
     loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
     rs = gain / loss
     return 100 - (100 / (1 + rs))
+
+# Function to calculate technical indicators
+def calculate_technical_indicators(data):
+    """
+    Calculates Bollinger Bands, RSI, and Volatility.
+    Handles cases where there are insufficient data points for rolling calculations.
+    """
+    data['SMA20'] = data['Close'].rolling(window=20).mean()
+    rolling_std = data['Close'].rolling(window=20).std()
+
+    # Bollinger Bands
+    data['Upper Band'] = data['SMA20'] + 2 * rolling_std
+    data['Lower Band'] = data['SMA20'] - 2 * rolling_std
+
+    # RSI
+    data['RSI'] = calculate_rsi(data)
+
+    # Volatility
+    data['Volatility'] = data['Close'].rolling(window=10).std()
+
+    # Drop rows with NaN values
+    data.dropna(inplace=True)
+    return data
 
 # Function to generate short-term insights
 def generate_suggestions(data):
