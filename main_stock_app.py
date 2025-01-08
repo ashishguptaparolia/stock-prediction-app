@@ -56,32 +56,24 @@ def calculate_rsi(data, window=14):
     return rsi
 
 def calculate_technical_indicators(data):
-    # Ensure the DataFrame is not empty and has sufficient rows
     if data.empty or len(data) < 20:
         raise ValueError("Insufficient data: At least 20 rows are required to calculate Bollinger Bands.")
 
-    # Ensure the 'Close' column exists and has no missing values
     if 'Close' not in data.columns:
         raise ValueError("'Close' column is missing in the data.")
     if data['Close'].isnull().any():
         raise ValueError("'Close' column contains missing values. Please ensure data integrity.")
 
     try:
-        # Calculate 20-day SMA
         data['SMA20'] = data['Close'].rolling(window=20).mean()
-        # Calculate rolling standard deviation
         rolling_std = data['Close'].rolling(window=20).std()
-        # Calculate Bollinger Bands
         data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
         data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
-        # Calculate RSI
         data['RSI'] = calculate_rsi(data)
     except Exception as e:
         raise ValueError(f"An error occurred during technical indicator calculations: {e}")
 
-    # Drop rows with NaN values caused by rolling calculations
     data.dropna(inplace=True)
-
     return data
 
 def short_term_prediction(data):
@@ -108,10 +100,22 @@ def generate_seasonality(data):
     return seasonality
 
 def generate_volatility_heatmap(data):
-    data['Daily Change'] = data['Close'].pct_change()
-    data['Day'] = data.index.day
-    data['Month'] = data.index.month
-    heatmap_data = data.pivot("Day", "Month", "Daily Change")
+    if data.empty:
+        raise ValueError("No data available for generating the volatility heatmap.")
+
+    try:
+        data['Daily Change'] = data['Close'].pct_change()
+        data['Day'] = data.index.day
+        data['Month'] = data.index.month
+
+        if data[['Daily Change', 'Day', 'Month']].isnull().any().any():
+            raise ValueError("Missing values detected in data required for the heatmap.")
+
+        heatmap_data = data.pivot_table(values='Daily Change', index='Day', columns='Month', aggfunc='mean')
+        heatmap_data.fillna(0, inplace=True)
+    except Exception as e:
+        raise ValueError(f"An error occurred while generating the heatmap: {e}")
+
     return heatmap_data
 
 def generate_investment_calculator(data, investment_amount):
@@ -124,13 +128,11 @@ def generate_investment_calculator(data, investment_amount):
 # Main App Logic
 def main():
     try:
-        # Fetch data
         data = yf.download(symbol, period="1y", interval="1d")
         if data.empty:
             st.error(f"No data found for {symbol}. Please check the ticker symbol and try again.")
             return
 
-        # Calculate technical indicators
         data = calculate_technical_indicators(data)
     except ValueError as e:
         st.error(f"Error: {e}")
@@ -139,7 +141,6 @@ def main():
         st.error(f"An unexpected error occurred: {e}")
         return
 
-    # Bollinger Bands
     if "Bollinger Bands" in analysis_options:
         st.subheader("Bollinger Bands")
         plt.figure(figsize=(12, 6))
@@ -152,7 +153,6 @@ def main():
         plt.legend()
         st.pyplot(plt)
 
-    # RSI
     if "RSI" in analysis_options:
         st.subheader("RSI (Relative Strength Index)")
         plt.figure(figsize=(12, 4))
@@ -163,7 +163,6 @@ def main():
         plt.legend()
         st.pyplot(plt)
 
-    # Sentiment Analysis
     if "Sentiment Analysis" in analysis_options:
         st.subheader("News Sentiment Analysis")
         sentiment = fetch_news_sentiment(symbol)
@@ -174,7 +173,6 @@ def main():
         else:
             st.write("Unable to fetch news sentiment.")
 
-    # Peer Comparison
     if "Peer Comparison" in analysis_options:
         st.subheader("Peer Comparison")
         peers = st.sidebar.text_input("Enter peer tickers (comma-separated)", "MSFT,GOOGL").split(",")
@@ -182,20 +180,24 @@ def main():
         st.write("Latest Prices of Peers:")
         st.write(peer_data)
 
-    # Seasonality Insights
     if "Seasonality Insights" in analysis_options:
         st.subheader("Seasonality Insights")
         seasonality = generate_seasonality(data)
         st.bar_chart(seasonality)
 
-    # Volatility Heatmap
     if "Volatility Heatmap" in analysis_options:
         st.subheader("Volatility Heatmap")
-        heatmap_data = generate_volatility_heatmap(data)
-        sns.heatmap(heatmap_data, cmap="coolwarm", annot=False)
-        st.pyplot()
+        try:
+            heatmap_data = generate_volatility_heatmap(data)
+            plt.figure(figsize=(10, 6))
+            sns.heatmap(heatmap_data, cmap="coolwarm", annot=False)
+            plt.title(f"Volatility Heatmap for {symbol}")
+            st.pyplot(plt)
+        except ValueError as e:
+            st.error(f"Error generating heatmap: {e}")
+        except Exception as e:
+            st.error(f"An unexpected error occurred: {e}")
 
-    # Investment Calculator
     if "Investment Calculator" in analysis_options:
         st.subheader("Investment Calculator")
         investment_amount = st.number_input("Enter Investment Amount ($):", min_value=100, value=1000)
