@@ -8,8 +8,8 @@ import time
 from sklearn.linear_model import LinearRegression
 import requests
 
-# News API Key
-NEWS_API_KEY = "YOUR_NEWS_API_KEY"
+# Your News API Key
+NEWS_API_KEY = "364b5eac98da4a31ac519a8d67581444"
 
 # App title
 st.title("Advanced Stock, Crypto, and Indian Stock Analysis with Intelligent Insights")
@@ -86,22 +86,34 @@ def advanced_prediction(data):
 
 # Function for news sentiment analysis
 def fetch_news_sentiment(symbol):
+    """
+    Fetches news sentiment using News API.
+    Categorizes sentiment into Positive, Neutral, and Negative.
+    """
     url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        articles = response.json().get('articles', [])
-        positive, neutral, negative = 0, 0, 0
-        for article in articles[:10]:  # Limit to 10 articles
-            description = article.get('description', '')
-            if any(word in description.lower() for word in ['gain', 'rise', 'increase', 'bull']):
-                positive += 1
-            elif any(word in description.lower() for word in ['fall', 'drop', 'decrease', 'bear']):
-                negative += 1
-            else:
-                neutral += 1
-        return positive, neutral, negative
-    else:
-        st.error("Failed to fetch news sentiment.")
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            articles = response.json().get('articles', [])
+            if not articles:
+                st.warning(f"No news articles found for {symbol}.")
+                return 0, 0, 0
+
+            positive, neutral, negative = 0, 0, 0
+            for article in articles[:10]:  # Limit to 10 articles
+                description = article.get('description', '')
+                if any(word in description.lower() for word in ['gain', 'rise', 'increase', 'bull']):
+                    positive += 1
+                elif any(word in description.lower() for word in ['fall', 'drop', 'decrease', 'bear']):
+                    negative += 1
+                else:
+                    neutral += 1
+            return positive, neutral, negative
+        else:
+            st.error(f"News API request failed with status code {response.status_code}: {response.text}")
+            return 0, 0, 0
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching news sentiment: {e}")
         return 0, 0, 0
 
 # Function to generate insights
