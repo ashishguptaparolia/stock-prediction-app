@@ -5,9 +5,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import time
+from sklearn.linear_model import LinearRegression
+import requests
+
+# News API Key
+NEWS_API_KEY = "YOUR_NEWS_API_KEY"
 
 # App title
-st.title("Advanced Stock, Crypto, and Indian Stock Insights")
+st.title("Advanced Stock, Crypto, and Indian Stock Analysis with Intelligent Insights")
 
 # Sidebar inputs
 st.sidebar.header("Select Parameters")
@@ -46,15 +51,9 @@ def calculate_rsi(data, window=14):
 
 # Function to calculate technical indicators
 def calculate_technical_indicators(data):
-    """
-    Calculates Bollinger Bands, RSI, and Volatility.
-    Ensures columns are properly flattened for single-level access.
-    """
-    # Flatten multi-index columns (if applicable)
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = ['_'.join(col).strip() for col in data.columns.values]
 
-    # Ensure 'Close' column exists
     if 'Close' not in data.columns:
         close_col = [col for col in data.columns if 'Close' in col]
         if close_col:
@@ -62,48 +61,61 @@ def calculate_technical_indicators(data):
         else:
             raise ValueError("No 'Close' column found in the data.")
 
-    # Ensure there are enough rows for rolling calculations
     if len(data) < 20:
         raise ValueError("Not enough data to calculate technical indicators. At least 20 rows are required.")
 
-    # Calculate 20-day Simple Moving Average (SMA)
     data['SMA20'] = data['Close'].rolling(window=20).mean()
-
-    # Calculate rolling standard deviation for Bollinger Bands
     rolling_std = data['Close'].rolling(window=20).std()
-
-    # Calculate Bollinger Bands
     data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
     data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
-
-    # Calculate RSI
     data['RSI'] = calculate_rsi(data)
-
-    # Calculate Volatility (Standard Deviation over 10 days)
     data['Volatility'] = data['Close'].rolling(window=10).std()
-
-    # Drop rows with NaN values (optional, for cleaner results)
     data.dropna(inplace=True)
-
     return data
 
-# Function to generate short-term insights
-def generate_suggestions(data):
+# Function for advanced prediction
+def advanced_prediction(data):
+    data['Lag1'] = data['Close'].shift(1)
+    data.dropna(inplace=True)
+    X = np.array(data[['Lag1']])
+    y = np.array(data['Close'])
+    model = LinearRegression()
+    model.fit(X, y)
+    prediction = model.predict(X[-1].reshape(1, -1))
+    return prediction[0]
+
+# Function for news sentiment analysis
+def fetch_news_sentiment(symbol):
+    url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        articles = response.json().get('articles', [])
+        positive, neutral, negative = 0, 0, 0
+        for article in articles[:10]:  # Limit to 10 articles
+            description = article.get('description', '')
+            if any(word in description.lower() for word in ['gain', 'rise', 'increase', 'bull']):
+                positive += 1
+            elif any(word in description.lower() for word in ['fall', 'drop', 'decrease', 'bear']):
+                negative += 1
+            else:
+                neutral += 1
+        return positive, neutral, negative
+    else:
+        st.error("Failed to fetch news sentiment.")
+        return 0, 0, 0
+
+# Function to generate insights
+def generate_insights(data, symbol):
+    positive, neutral, negative = fetch_news_sentiment(symbol)
+    insights = f"News Sentiment - Positive: {positive}, Neutral: {neutral}, Negative: {negative}\n"
     latest_rsi = data['RSI'].iloc[-1]
     if latest_rsi > 70:
-        suggestion = "Sell - The stock is overbought."
+        insights += "RSI indicates overbought conditions. Possible Sell.\n"
     elif latest_rsi < 30:
-        suggestion = "Buy - The stock is oversold."
+        insights += "RSI indicates oversold conditions. Possible Buy.\n"
     else:
-        suggestion = "Hold - RSI is neutral."
-    
-    # Check for breakout above/below Bollinger Bands
-    if data['Close'].iloc[-1] > data['Upper Band'].iloc[-1]:
-        suggestion += " Possible uptrend breakout."
-    elif data['Close'].iloc[-1] < data['Lower Band'].iloc[-1]:
-        suggestion += " Possible downtrend breakout."
-    
-    return suggestion
+        insights += "RSI is neutral. Hold.\n"
+    return insights
 
 # Main app logic
 def main():
@@ -111,23 +123,19 @@ def main():
     if data.empty:
         st.error(f"No data found for {symbol}.")
         return
-    
-    # Flatten columns for compatibility
+
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = ['_'.join(col).strip() for col in data.columns.values]
 
-    # Display historical data
     st.subheader(f"Historical Data for {symbol}")
     st.write(data.tail())
 
-    # Calculate technical indicators
     try:
         data = calculate_technical_indicators(data)
     except ValueError as e:
         st.error(e)
         return
 
-    # Plot Bollinger Bands
     st.subheader("Bollinger Bands and Trends")
     plt.figure(figsize=(12, 6))
     plt.plot(data['Close'], label='Closing Price', color='blue')
@@ -138,23 +146,24 @@ def main():
     plt.legend()
     st.pyplot(plt)
 
-    # Short-term suggestions
-    suggestion = generate_suggestions(data)
-    st.subheader("Short-Term Suggestion")
-    st.write(suggestion)
+    st.subheader("Short-Term Predictions")
+    predicted_price = advanced_prediction(data)
+    st.write(f"Predicted Price for Next Day: ${predicted_price:.2f}")
 
-    # Enable live updates
+    insights = generate_insights(data, symbol)
+    st.subheader("Intelligent Insights")
+    st.write(insights)
+
     if live_update:
         st.subheader("Live Data Updates")
-        while True:
-            live_data = fetch_live_data(symbol)
-            if live_data:
-                st.metric(label="Live Price", value=f"${live_data['price']:.2f}")
-                st.metric(label="Volume", value=f"{live_data['volume']:,}")
-                st.metric(label="Change (%)", value=f"{live_data['change']:.2f}%")
-            else:
-                st.error("Unable to fetch live data.")
-            time.sleep(refresh_interval)
+        live_data = fetch_live_data(symbol)
+        if live_data:
+            st.metric(label="Live Price", value=f"${live_data['price']:.2f}")
+            st.metric(label="Volume", value=f"{live_data['volume']:,}")
+            st.metric(label="Change (%)", value=f"{live_data['change']:.2f}%")
+        else:
+            st.error("Unable to fetch live data.")
+        time.sleep(refresh_interval)
 
 # Run the app
 if st.button("Run Analysis"):
