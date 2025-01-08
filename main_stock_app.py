@@ -89,6 +89,7 @@ def fetch_news_sentiment(symbol):
     """
     Fetches news sentiment using News API.
     Categorizes sentiment into Positive, Neutral, and Negative.
+    Handles cases where 'description' is missing.
     """
     url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
     try:
@@ -101,7 +102,7 @@ def fetch_news_sentiment(symbol):
 
             positive, neutral, negative = 0, 0, 0
             for article in articles[:10]:  # Limit to 10 articles
-                description = article.get('description', '')
+                description = article.get('description', '') or ''  # Default to empty string if missing
                 if any(word in description.lower() for word in ['gain', 'rise', 'increase', 'bull']):
                     positive += 1
                 elif any(word in description.lower() for word in ['fall', 'drop', 'decrease', 'bear']):
