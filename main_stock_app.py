@@ -1,38 +1,9 @@
-import streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import requests
-
-# Your News API Key
-NEWS_API_KEY = "364b5eac98da4a31ac519a8d67581444"
-
-# App title
-st.set_page_config(page_title="Advanced Stock, Crypto, and Investment Insights", layout="wide")
-st.title("📈 Advanced Stock, Crypto, and Investment Insights")
-
-# Sidebar inputs
-st.sidebar.header("Select Parameters")
-asset_type = st.sidebar.selectbox("Asset Type", ["Stock", "Crypto"])
-symbol = st.sidebar.text_input("Ticker Symbol", "AAPL").upper()
-features = st.sidebar.multiselect("Select Features", ["Bollinger Bands", "RSI", "Sentiment Analysis"])
-
-# Fetch historical data
-def fetch_data(symbol):
-    try:
-        data = yf.download(symbol, start="2020-01-01", end=pd.Timestamp.now().strftime("%Y-%m-%d"))
-        if data.empty:
-            raise ValueError(f"No data found for symbol: {symbol}")
-        data.reset_index(inplace=True)
-        return data
-    except Exception as e:
-        st.error(f"Error fetching data for {symbol}: {e}")
-        return None
-
-# Calculate technical indicators
+# Update the `calculate_technical_indicators` function
 def calculate_technical_indicators(data):
     try:
+        if data.empty:
+            raise ValueError("The dataset is empty. Unable to calculate indicators.")
+        
         if 'Close' not in data.columns:
             raise ValueError("'Close' column is missing in the data.")
         
@@ -46,23 +17,30 @@ def calculate_technical_indicators(data):
         delta = data['Close'].diff()
         gain = delta.where(delta > 0, 0).rolling(window=14).mean()
         loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
+        loss.replace(0, np.nan, inplace=True)  # Avoid division by zero
         rs = gain / loss
         data['RSI'] = 100 - (100 / (1 + rs))
         
-        data.fillna(0, inplace=True)
+        data.fillna(0, inplace=True)  # Fill NaN values
         return data
     except Exception as e:
         st.error(f"Error calculating technical indicators: {e}")
         return None
 
-# Fetch sentiment analysis
+# Update `fetch_news_sentiment` function
 def fetch_news_sentiment(symbol):
     try:
         url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
         response = requests.get(url)
         if response.status_code != 200:
-            raise ValueError(f"News API error: {response.json().get('message', 'Unknown error')}")
-        articles = response.json().get('articles', [])
+            raise ValueError(f"News API returned status code {response.status_code}")
+        
+        response_data = response.json()
+        articles = response_data.get('articles', [])
+        
+        if not articles:
+            raise ValueError("No articles found in the News API response.")
+        
         positive, neutral, negative = 0, 0, 0
         for article in articles:
             description = article.get('description', '').lower()
@@ -77,11 +55,12 @@ def fetch_news_sentiment(symbol):
         st.error(f"Error fetching news sentiment: {e}")
         return None, None, None
 
-# Main app logic
+# Check for empty DataFrame in the main function
 def main():
     try:
         data = fetch_data(symbol)
-        if data is None:
+        if data is None or data.empty:
+            st.error(f"No valid data found for symbol {symbol}. Please verify the ticker or source.")
             return
 
         if "Bollinger Bands" in features or "RSI" in features:
