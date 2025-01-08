@@ -81,6 +81,8 @@ def calculate_technical_indicators(data):
     try:
         data['SMA20'] = data['Close'].rolling(window=20).mean()
         rolling_std = data['Close'].rolling(window=20).std()
+        if rolling_std is None or rolling_std.empty:
+            raise ValueError("Rolling standard deviation calculation failed.")
         data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
         data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
         data['RSI'] = calculate_rsi(data)
