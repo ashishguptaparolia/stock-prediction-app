@@ -38,8 +38,8 @@ def calculate_technical_indicators(data):
         # Bollinger Bands
         data['SMA20'] = data['Close'].rolling(window=20).mean()
         rolling_std = data['Close'].rolling(window=20).std()
-        data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
-        data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
+        data['Upper Band'] = (data['SMA20'] + (2 * rolling_std)).fillna(0)
+        data['Lower Band'] = (data['SMA20'] - (2 * rolling_std)).fillna(0)
         
         # RSI
         delta = data['Close'].diff()
