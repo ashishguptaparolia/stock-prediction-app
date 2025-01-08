@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 import requests
 
 # Your News API Key
@@ -23,7 +22,7 @@ features = st.sidebar.multiselect("Select Features", ["Bollinger Bands", "RSI", 
 def fetch_data(symbol):
     try:
         data = yf.download(symbol, start="2020-01-01", end=pd.Timestamp.now().strftime("%Y-%m-%d"))
-        data = data.reset_index()
+        data.reset_index(inplace=True)
         return data
     except Exception as e:
         st.error(f"Error fetching data for {symbol}: {e}")
@@ -38,8 +37,8 @@ def calculate_technical_indicators(data):
         # Bollinger Bands
         data['SMA20'] = data['Close'].rolling(window=20).mean()
         rolling_std = data['Close'].rolling(window=20).std()
-        data['Upper Band'] = (data['SMA20'] + 2 * rolling_std).fillna(0)
-        data['Lower Band'] = (data['SMA20'] - 2 * rolling_std).fillna(0)
+        data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
+        data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
         
         # RSI
         delta = data['Close'].diff()
@@ -48,6 +47,7 @@ def calculate_technical_indicators(data):
         rs = gain / loss
         data['RSI'] = 100 - (100 / (1 + rs))
         
+        data.fillna(0, inplace=True)
         return data
     except Exception as e:
         st.error(f"Error calculating technical indicators: {e}")
