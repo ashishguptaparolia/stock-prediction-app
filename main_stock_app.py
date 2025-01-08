@@ -56,13 +56,12 @@ def calculate_rsi(data, window=14):
     return rsi
 
 def calculate_technical_indicators(data):
-    if data.empty or len(data) < 20:
-        raise ValueError("Insufficient data: At least 20 rows are required to calculate Bollinger Bands.")
-
+    if data.empty:
+        raise ValueError("The dataset is empty. Please check the ticker symbol or data source.")
     if 'Close' not in data.columns:
-        raise ValueError("'Close' column is missing in the data.")
+        raise ValueError("'Close' column is missing in the dataset. Please verify the data source.")
     if data['Close'].isnull().any():
-        raise ValueError("'Close' column contains missing values. Please ensure data integrity.")
+        raise ValueError("The 'Close' column contains missing values. Please check the dataset integrity.")
 
     try:
         data['SMA20'] = data['Close'].rolling(window=20).mean()
@@ -71,7 +70,7 @@ def calculate_technical_indicators(data):
         data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
         data['RSI'] = calculate_rsi(data)
     except Exception as e:
-        raise ValueError(f"An error occurred during technical indicator calculations: {e}")
+        raise ValueError(f"An error occurred while calculating technical indicators: {e}")
 
     data.dropna(inplace=True)
     return data
@@ -130,7 +129,7 @@ def main():
     try:
         data = yf.download(symbol, period="1y", interval="1d")
         if data.empty:
-            st.error(f"No data found for {symbol}. Please check the ticker symbol and try again.")
+            st.error(f"No data found for {symbol}. Please check the ticker symbol or data source.")
             return
 
         data = calculate_technical_indicators(data)
@@ -171,14 +170,7 @@ def main():
             st.write(f"Neutral Articles: {sentiment[1]}")
             st.write(f"Negative Articles: {sentiment[2]}")
         else:
-            st.write("Unable to fetch news sentiment.")
-
-    if "Peer Comparison" in analysis_options:
-        st.subheader("Peer Comparison")
-        peers = st.sidebar.text_input("Enter peer tickers (comma-separated)", "MSFT,GOOGL").split(",")
-        peer_data = generate_peer_comparison(peers)
-        st.write("Latest Prices of Peers:")
-        st.write(peer_data)
+            st.error("Failed to fetch news sentiment. Please check your API key or internet connection.")
 
     if "Seasonality Insights" in analysis_options:
         st.subheader("Seasonality Insights")
