@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 import seaborn as sns
 import requests
-from datetime import datetime
-import time
 
 # Your News API Key
 NEWS_API_KEY = "364b5eac98da4a31ac519a8d67581444"
@@ -58,13 +56,24 @@ def calculate_rsi(data, window=14):
     return rsi
 
 def calculate_technical_indicators(data):
+    # Ensure the DataFrame has enough rows
+    if len(data) < 20:
+        raise ValueError("Not enough data to calculate technical indicators. At least 20 rows are required.")
+
+    # Ensure the 'Close' column exists
+    if 'Close' not in data.columns:
+        raise ValueError("The data does not contain a 'Close' column required for calculations.")
+
+    # Calculate technical indicators
     data['SMA20'] = data['Close'].rolling(window=20).mean()
     rolling_std = data['Close'].rolling(window=20).std()
     data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
     data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
     data['RSI'] = calculate_rsi(data)
-    data['Volatility'] = data['Close'].rolling(window=10).std()
+
+    # Drop rows with NaN values resulting from rolling calculations
     data.dropna(inplace=True)
+
     return data
 
 def short_term_prediction(data):
@@ -111,8 +120,12 @@ def main():
         st.error(f"No data found for {symbol}. Please check the ticker symbol and try again.")
         return
 
-    # Calculate technical indicators
-    data = calculate_technical_indicators(data)
+    try:
+        # Calculate technical indicators
+        data = calculate_technical_indicators(data)
+    except ValueError as e:
+        st.error(str(e))
+        return
 
     # Bollinger Bands
     if "Bollinger Bands" in analysis_options:
