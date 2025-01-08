@@ -50,6 +50,10 @@ def calculate_technical_indicators(data):
     Calculates Bollinger Bands, RSI, and Volatility.
     Handles cases where there are insufficient data points for rolling calculations.
     """
+    # Ensure 'Close' is a single column (Series)
+    if not isinstance(data['Close'], pd.Series):
+        data['Close'] = data['Close'].iloc[:, 0]  # Fix multi-column issue if needed
+
     # Ensure there are enough rows for rolling calculations
     if len(data) < 20:
         raise ValueError("Not enough data to calculate technical indicators. At least 20 rows are required.")
@@ -61,8 +65,8 @@ def calculate_technical_indicators(data):
     rolling_std = data['Close'].rolling(window=20).std()
 
     # Calculate Bollinger Bands
-    data['Upper Band'] = data['SMA20'] + 2 * rolling_std
-    data['Lower Band'] = data['SMA20'] - 2 * rolling_std
+    data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
+    data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
 
     # Calculate RSI
     data['RSI'] = calculate_rsi(data)
