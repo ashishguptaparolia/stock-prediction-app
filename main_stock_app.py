@@ -1,129 +1,121 @@
 import streamlit as st
 import yfinance as yf
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM
-import requests
+import time
+from datetime import datetime
 
 # App title
-st.title("Enhanced Stock Analysis, Forecasting, and Portfolio Management")
+st.title("Advanced Live Stock, Crypto, and Indian Stock Insights")
 
 # Sidebar inputs
 st.sidebar.header("Select Parameters")
-stock_symbol = st.sidebar.text_input("Stock Ticker (e.g., AAPL, TSLA, MSFT)", "AAPL")
-start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2020-01-01"))
-end_date = st.sidebar.date_input("End Date", pd.to_datetime("2024-12-31"))
+asset_type = st.sidebar.selectbox("Asset Type", ["Stock", "Cryptocurrency", "Indian Stock"])
+if asset_type == "Cryptocurrency":
+    st.sidebar.write("Example: BTC-USD, ETH-USD")
+elif asset_type == "Indian Stock":
+    st.sidebar.write("Example: TCS.NS, RELIANCE.NS")
+else:
+    st.sidebar.write("Example: AAPL, TSLA, MSFT")
+    
+symbol = st.sidebar.text_input("Ticker Symbol", "AAPL")
+live_update = st.sidebar.checkbox("Enable Live Data Updates", value=False)
+refresh_interval = st.sidebar.number_input("Refresh Interval (seconds)", min_value=10, max_value=300, value=60) if live_update else None
 
-# News API Key
-NEWS_API_KEY = "364b5eac98da4a31ac519a8d67581444"
-
-# Function to extract key columns
-def extract_columns(data, stock_symbol):
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = ['_'.join(col).strip() for col in data.columns.values]
-    # Dynamically rename columns
-    columns_mapping = {}
-    for col in data.columns:
-        if 'Close' in col and stock_symbol in col:
-            columns_mapping[col] = 'Close'
-        elif 'Open' in col and stock_symbol in col:
-            columns_mapping[col] = 'Open'
-        elif 'High' in col and stock_symbol in col:
-            columns_mapping[col] = 'High'
-        elif 'Low' in col and stock_symbol in col:
-            columns_mapping[col] = 'Low'
-        elif 'Volume' in col and stock_symbol in col:
-            columns_mapping[col] = 'Volume'
-    data.rename(columns=columns_mapping, inplace=True)
-    return data
+# Function to fetch live data
+def fetch_live_data(symbol):
+    ticker = yf.Ticker(symbol)
+    live_data = ticker.history(period="1d", interval="1m")
+    if live_data.empty:
+        return None
+    latest_row = live_data.iloc[-1]
+    return {
+        "price": latest_row["Close"],
+        "volume": latest_row["Volume"],
+        "change": (latest_row["Close"] - live_data.iloc[0]["Close"]) / live_data.iloc[0]["Close"] * 100
+    }
 
 # Function to calculate technical indicators
-def calculate_indicators(data):
+def calculate_technical_indicators(data):
     data['SMA20'] = data['Close'].rolling(window=20).mean()
     data['Upper Band'] = data['SMA20'] + 2 * data['Close'].rolling(window=20).std()
     data['Lower Band'] = data['SMA20'] - 2 * data['Close'].rolling(window=20).std()
-    data['MACD'] = data['Close'].ewm(span=12, adjust=False).mean() - data['Close'].ewm(span=26, adjust=False).mean()
-    data['Signal Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
-    data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).cumsum()
+    data['RSI'] = calculate_rsi(data)
+    data['Volatility'] = data['Close'].rolling(window=10).std()
     return data
 
-# LSTM-based price prediction
-def predict_prices(data):
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(data['Close'].values.reshape(-1, 1))
-    X_train = []
-    y_train = []
-    for i in range(60, len(scaled_data)):
-        X_train.append(scaled_data[i-60:i])
-        y_train.append(scaled_data[i])
-    X_train, y_train = np.array(X_train), np.array(y_train)
-    X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
-    
-    model = Sequential()
-    model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
-    model.add(LSTM(units=50, return_sequences=False))
-    model.add(Dense(units=25))
-    model.add(Dense(units=1))
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    model.fit(X_train, y_train, batch_size=32, epochs=5)
-    
-    last_60_days = scaled_data[-60:]
-    forecast = []
-    for _ in range(30):
-        prediction = model.predict(last_60_days.reshape(1, -1, 1))
-        forecast.append(prediction[0, 0])
-        last_60_days = np.append(last_60_days[1:], prediction[0, 0]).reshape(-1, 1)
-    return scaler.inverse_transform(np.array(forecast).reshape(-1, 1))
+# Function to calculate RSI
+def calculate_rsi(data, window=14):
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
-# Fetch news sentiment
-def fetch_news_sentiment(symbol):
-    url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
-    response = requests.get(url)
-    sentiment = {"positive": 0, "neutral": 0, "negative": 0}
-    if response.status_code == 200:
-        articles = response.json().get("articles", [])
-        for article in articles:
-            title = article.get('title', '').lower()
-            if "good" in title or "positive" in title or "gain" in title:
-                sentiment["positive"] += 1
-            elif "bad" in title or "negative" in title or "loss" in title:
-                sentiment["negative"] += 1
+# Function to generate short-term insights
+def generate_suggestions(data):
+    latest_rsi = data['RSI'].iloc[-1]
+    if latest_rsi > 70:
+        suggestion = "Sell - The stock is overbought."
+    elif latest_rsi < 30:
+        suggestion = "Buy - The stock is oversold."
+    else:
+        suggestion = "Hold - RSI is neutral."
+    
+    # Check for breakout above/below Bollinger Bands
+    if data['Close'].iloc[-1] > data['Upper Band'].iloc[-1]:
+        suggestion += " Possible uptrend breakout."
+    elif data['Close'].iloc[-1] < data['Lower Band'].iloc[-1]:
+        suggestion += " Possible downtrend breakout."
+    
+    return suggestion
+
+# Main app logic
+def main():
+    data = yf.download(symbol, period="6mo", interval="1d")
+    if data.empty:
+        st.error(f"No data found for {symbol}.")
+        return
+    
+    # Display historical data
+    st.subheader(f"Historical Data for {symbol}")
+    st.write(data.tail())
+
+    # Calculate technical indicators
+    data = calculate_technical_indicators(data)
+
+    # Plot Bollinger Bands
+    st.subheader("Bollinger Bands and Trends")
+    plt.figure(figsize=(12, 6))
+    plt.plot(data['Close'], label='Closing Price', color='blue')
+    plt.plot(data['Upper Band'], label='Upper Band', color='red')
+    plt.plot(data['Lower Band'], label='Lower Band', color='green')
+    plt.fill_between(data.index, data['Upper Band'], data['Lower Band'], color='gray', alpha=0.2)
+    plt.title(f"Bollinger Bands for {symbol}")
+    plt.legend()
+    st.pyplot(plt)
+
+    # Short-term suggestions
+    suggestion = generate_suggestions(data)
+    st.subheader("Short-Term Suggestion")
+    st.write(suggestion)
+
+    # Enable live updates
+    if live_update:
+        st.subheader("Live Data Updates")
+        while True:
+            live_data = fetch_live_data(symbol)
+            if live_data:
+                st.metric(label="Live Price", value=f"${live_data['price']:.2f}")
+                st.metric(label="Volume", value=f"{live_data['volume']:,}")
+                st.metric(label="Change (%)", value=f"{live_data['change']:.2f}%")
             else:
-                sentiment["neutral"] += 1
-    return sentiment
+                st.error("Unable to fetch live data.")
+            
+            time.sleep(refresh_interval)
+            st.experimental_rerun()
 
-# Main app
+# Run the app
 if st.button("Run Analysis"):
-    try:
-        data = yf.download(stock_symbol, start=start_date, end=end_date)
-        if data.empty:
-            st.warning("No data found for the selected ticker and date range.")
-            st.stop()
-        
-        data = extract_columns(data, stock_symbol)
-        data = calculate_indicators(data)
-        
-        st.subheader(f"{stock_symbol} Historical Data")
-        st.write(data.tail())
-        
-        st.subheader(f"{stock_symbol} Technical Indicators")
-        plt.figure(figsize=(12, 6))
-        plt.plot(data['Close'], label='Closing Price', color='blue')
-        plt.plot(data['Upper Band'], label='Upper Bollinger Band', color='red')
-        plt.plot(data['Lower Band'], label='Lower Bollinger Band', color='green')
-        plt.fill_between(data.index, data['Upper Band'], data['Lower Band'], color='gray', alpha=0.2)
-        plt.title(f"{stock_symbol} with Bollinger Bands")
-        plt.legend()
-        st.pyplot(plt)
-        
-        st.subheader("30-Day Price Forecast")
-        forecast = predict_prices(data)
-        forecast_dates = pd.date_range(data.index[-1] + pd.Timedelta(days=1), periods=30, freq='B')
-        forecast_df = pd.DataFrame({'Date': forecast_dates, 'Forecasted Price': forecast.flatten()})
-        st.write(forecast_df)
-        
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+    main()
