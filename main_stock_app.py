@@ -56,29 +56,30 @@ def calculate_rsi(data, window=14):
     return rsi
 
 def calculate_technical_indicators(data):
-    # Ensure the DataFrame has enough rows
-    if len(data) < 20:
-        raise ValueError("Not enough data to calculate Bollinger Bands. At least 20 rows are required.")
+    # Ensure the DataFrame is not empty and has sufficient rows
+    if data.empty or len(data) < 20:
+        raise ValueError("Insufficient data: At least 20 rows are required to calculate Bollinger Bands.")
 
-    # Ensure the 'Close' column exists
+    # Ensure the 'Close' column exists and has no missing values
     if 'Close' not in data.columns:
-        raise ValueError("The data does not contain a 'Close' column required for calculations.")
-
-    # Handle missing or NaN values in the 'Close' column
+        raise ValueError("'Close' column is missing in the data.")
     if data['Close'].isnull().any():
-        raise ValueError("The 'Close' column contains missing or NaN values. Please ensure the data is complete.")
+        raise ValueError("'Close' column contains missing values. Please ensure data integrity.")
 
-    # Calculate Bollinger Bands and RSI
     try:
+        # Calculate 20-day SMA
         data['SMA20'] = data['Close'].rolling(window=20).mean()
+        # Calculate rolling standard deviation
         rolling_std = data['Close'].rolling(window=20).std()
+        # Calculate Bollinger Bands
         data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
         data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
+        # Calculate RSI
         data['RSI'] = calculate_rsi(data)
     except Exception as e:
-        raise ValueError(f"An error occurred during Bollinger Bands calculation: {e}")
+        raise ValueError(f"An error occurred during technical indicator calculations: {e}")
 
-    # Drop rows with NaN values resulting from rolling calculations
+    # Drop rows with NaN values caused by rolling calculations
     data.dropna(inplace=True)
 
     return data
