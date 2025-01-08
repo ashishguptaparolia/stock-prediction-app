@@ -15,62 +15,23 @@ st.title("\ud83d\udcc8 Advanced Stock, Crypto, and Investment Insights")
 
 # Sidebar inputs
 st.sidebar.header("Select Parameters")
-asset_type = st.sidebar.selectbox("Asset Type", ["Stock", "Cryptocurrency", "Indian Stock"])
-symbol = st.sidebar.text_input("Ticker Symbol", "AAPL")
-analysis_options = st.sidebar.multiselect(
-    "Select Features",
-    ["Bollinger Bands", "RSI", "Sentiment Analysis", "Peer Comparison", 
-     "Seasonality Insights", "Volatility Heatmap", "Investment Calculator"],
-    default=["Bollinger Bands", "RSI", "Sentiment Analysis"]
-)
+asset_type = st.sidebar.selectbox("Asset Type", ["Stock", "Crypto"])
+ticker_symbol = st.sidebar.text_input("Ticker Symbol", value="AAPL")
+features = st.sidebar.multiselect("Select Features", ["Bollinger Bands", "RSI", "Sentiment Analysis", "Seasonality Insights"], default=["Bollinger Bands", "RSI"])
 
-# Helper Functions
-def fetch_data(ticker):
-    """Fetch historical data for the given ticker."""
-    try:
-        data = yf.download(ticker, period="6mo", interval="1d")
-        if 'Close' not in data.columns:
-            raise ValueError("'Close' column is missing in the fetched data.")
-        return data
-    except Exception as e:
-        st.error(f"Error fetching data for {ticker}: {e}")
+# Fetch Data
+def fetch_data(symbol, asset_type="Stock"):
+    if asset_type == "Stock":
+        data = yf.download(symbol, period="5y", progress=False)
+    elif asset_type == "Crypto":
+        data = yf.download(f"{symbol}-USD", period="5y", progress=False)
+    else:
+        st.error("Invalid asset type selected.")
         return None
+    return data
 
-def fetch_news_sentiment(symbol):
-    """Fetch sentiment analysis from news articles."""
-    url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            articles = response.json().get('articles', [])
-            positive, neutral, negative = 0, 0, 0
-            for article in articles[:10]:  # Limit to 10 articles
-                description = article.get('description', '') or ''
-                if any(word in description.lower() for word in ['gain', 'rise', 'increase', 'bull']):
-                    positive += 1
-                elif any(word in description.lower() for word in ['fall', 'drop', 'decrease', 'bear']):
-                    negative += 1
-                else:
-                    neutral += 1
-            return positive, neutral, negative
-        else:
-            st.warning("Failed to fetch news sentiment.")
-            return None
-    except Exception as e:
-        st.error(f"Error fetching news sentiment: {e}")
-        return None
-
-def calculate_rsi(data, window=14):
-    """Calculate Relative Strength Index (RSI)."""
-    delta = data['Close'].diff()
-    gain = delta.where(delta > 0, 0).rolling(window=window).mean()
-    loss = -delta.where(delta < 0, 0).rolling(window=window).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
+# Calculate Technical Indicators
 def calculate_technical_indicators(data):
-    """Calculate Bollinger Bands and RSI."""
     if data.empty:
         raise ValueError("The dataset is empty. Please check the ticker symbol or data source.")
     if 'Close' not in data.columns:
@@ -79,89 +40,99 @@ def calculate_technical_indicators(data):
         raise ValueError("The 'Close' column contains missing values. Please check the dataset integrity.")
 
     try:
+        # Calculate the 20-day SMA
         data['SMA20'] = data['Close'].rolling(window=20).mean()
+
+        # Calculate the rolling standard deviation
         rolling_std = data['Close'].rolling(window=20).std()
-        if rolling_std is None or rolling_std.empty:
-            raise ValueError("Rolling standard deviation calculation failed.")
+        if rolling_std.isnull().any():
+            raise ValueError("Rolling standard deviation contains null values.")
+
+        # Add Bollinger Bands
         data['Upper Band'] = data['SMA20'] + (2 * rolling_std)
         data['Lower Band'] = data['SMA20'] - (2 * rolling_std)
+
+        # Calculate RSI
         data['RSI'] = calculate_rsi(data)
+        
+        # Drop rows with missing values resulting from rolling calculations
+        data.dropna(inplace=True)
+
     except Exception as e:
         raise ValueError(f"An error occurred while calculating technical indicators: {e}")
 
-    data.dropna(inplace=True)
     return data
 
-def generate_volatility_heatmap(data):
-    """Generate a heatmap for daily volatility."""
-    if data.empty:
-        raise ValueError("No data available for generating the volatility heatmap.")
+# Calculate RSI
+def calculate_rsi(data, window=14):
+    delta = data['Close'].diff()
+    gain = delta.where(delta > 0, 0).rolling(window=window).mean()
+    loss = -delta.where(delta < 0, 0).rolling(window=window).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
+# Fetch News Sentiment
+def fetch_news_sentiment(symbol):
+    url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
     try:
-        data['Daily Change'] = data['Close'].pct_change()
-        data['Day'] = data.index.day
-        data['Month'] = data.index.month
-
-        heatmap_data = data.pivot_table(values='Daily Change', index='Day', columns='Month', aggfunc='mean')
-        heatmap_data.fillna(0, inplace=True)
+        response = requests.get(url)
+        response.raise_for_status()
+        articles = response.json()["articles"]
+        positive = sum(1 for article in articles if any(word in article["description"].lower() for word in ["gain", "rise", "increase"]))
+        neutral = sum(1 for article in articles if any(word in article["description"].lower() for word in ["hold", "steady", "neutral"]))
+        negative = len(articles) - positive - neutral
+        return positive, neutral, negative
     except Exception as e:
-        raise ValueError(f"An error occurred while generating the heatmap: {e}")
-
-    return heatmap_data
+        st.error(f"Error fetching news sentiment: {e}")
+        return None, None, None
 
 # Main App Logic
 def main():
     try:
-        data = fetch_data(symbol)
+        data = fetch_data(ticker_symbol, asset_type)
         if data is None or data.empty:
-            st.error(f"No data found for {symbol}. Please check the ticker symbol or data source.")
+            st.error(f"No data found for {ticker_symbol}. Please check the ticker symbol or data source.")
             return
 
-        data = calculate_technical_indicators(data)
-        st.write(data.tail())
+        if "Bollinger Bands" in features or "RSI" in features:
+            data = calculate_technical_indicators(data)
 
-        if "Bollinger Bands" in analysis_options:
+        if "Bollinger Bands" in features:
             st.subheader("Bollinger Bands")
-            try:
-                plt.figure(figsize=(12, 6))
-                plt.plot(data['Close'], label="Closing Price", color="blue")
-                plt.plot(data['SMA20'], label="20-Day SMA", color="orange")
-                plt.plot(data['Upper Band'], label="Upper Band", color="green")
-                plt.plot(data['Lower Band'], label="Lower Band", color="red")
-                plt.fill_between(data.index, data['Lower Band'], data['Upper Band'], color="gray", alpha=0.2)
-                plt.title(f"Bollinger Bands for {symbol}")
-                plt.legend()
-                st.pyplot(plt)
-            except Exception as e:
-                st.error(f"Error plotting Bollinger Bands: {e}")
+            plt.figure(figsize=(10, 6))
+            plt.plot(data['Close'], label='Close', color='blue')
+            plt.plot(data['Upper Band'], label='Upper Band', color='red')
+            plt.plot(data['Lower Band'], label='Lower Band', color='green')
+            plt.legend()
+            st.pyplot()
 
-        if "RSI" in analysis_options:
-            st.subheader("RSI (Relative Strength Index)")
-            try:
-                plt.figure(figsize=(12, 4))
-                plt.plot(data['RSI'], label="RSI", color="purple")
-                plt.axhline(70, linestyle="--", color="red", label="Overbought (70)")
-                plt.axhline(30, linestyle="--", color="green", label="Oversold (30)")
-                plt.title(f"RSI for {symbol}")
-                plt.legend()
-                st.pyplot(plt)
-            except Exception as e:
-                st.error(f"Error plotting RSI: {e}")
+        if "RSI" in features:
+            st.subheader("Relative Strength Index (RSI)")
+            plt.figure(figsize=(10, 6))
+            plt.plot(data['RSI'], label='RSI', color='orange')
+            plt.axhline(70, linestyle='--', color='red', label='Overbought')
+            plt.axhline(30, linestyle='--', color='green', label='Oversold')
+            plt.legend()
+            st.pyplot()
 
-        if "Volatility Heatmap" in analysis_options:
-            st.subheader("Volatility Heatmap")
-            try:
-                heatmap_data = generate_volatility_heatmap(data)
-                plt.figure(figsize=(10, 6))
-                sns.heatmap(heatmap_data, cmap="coolwarm", annot=False)
-                plt.title(f"Volatility Heatmap for {symbol}")
-                st.pyplot(plt)
-            except Exception as e:
-                st.error(f"Error generating heatmap: {e}")
+        if "Sentiment Analysis" in features:
+            st.subheader("News Sentiment Analysis")
+            positive, neutral, negative = fetch_news_sentiment(ticker_symbol)
+            if positive is not None:
+                st.write(f"Positive Articles: {positive}")
+                st.write(f"Neutral Articles: {neutral}")
+                st.write(f"Negative Articles: {negative}")
+
+        if "Seasonality Insights" in features:
+            st.subheader("Seasonality Insights")
+            monthly_avg = data['Close'].resample('M').mean()
+            plt.figure(figsize=(10, 6))
+            sns.lineplot(data=monthly_avg, label='Monthly Average')
+            plt.legend()
+            st.pyplot()
 
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
-# Run the app
-if st.button("Run Analysis"):
+if __name__ == "__main__":
     main()
