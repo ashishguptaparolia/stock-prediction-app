@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
 import seaborn as sns
 import requests
 
@@ -12,7 +11,7 @@ NEWS_API_KEY = "364b5eac98da4a31ac519a8d67581444"
 
 # App title
 st.set_page_config(page_title="Advanced Stock, Crypto, and Investment Insights", layout="wide")
-st.title("📈 Advanced Stock, Crypto, and Investment Insights")
+st.title("\ud83d\udcc8 Advanced Stock, Crypto, and Investment Insights")
 
 # Sidebar inputs
 st.sidebar.header("Select Parameters")
@@ -26,7 +25,19 @@ analysis_options = st.sidebar.multiselect(
 )
 
 # Helper Functions
+def fetch_data(ticker):
+    """Fetch historical data for the given ticker."""
+    try:
+        data = yf.download(ticker, period="6mo", interval="1d")
+        if 'Close' not in data.columns:
+            raise ValueError("'Close' column is missing in the fetched data.")
+        return data
+    except Exception as e:
+        st.error(f"Error fetching data for {ticker}: {e}")
+        return None
+
 def fetch_news_sentiment(symbol):
+    """Fetch sentiment analysis from news articles."""
     url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
     try:
         response = requests.get(url)
@@ -43,12 +54,14 @@ def fetch_news_sentiment(symbol):
                     neutral += 1
             return positive, neutral, negative
         else:
+            st.warning("Failed to fetch news sentiment.")
             return None
     except Exception as e:
         st.error(f"Error fetching news sentiment: {e}")
         return None
 
 def calculate_rsi(data, window=14):
+    """Calculate Relative Strength Index (RSI)."""
     delta = data['Close'].diff()
     gain = delta.where(delta > 0, 0).rolling(window=window).mean()
     loss = -delta.where(delta < 0, 0).rolling(window=window).mean()
@@ -57,6 +70,7 @@ def calculate_rsi(data, window=14):
     return rsi
 
 def calculate_technical_indicators(data):
+    """Calculate Bollinger Bands and RSI."""
     if data.empty:
         raise ValueError("The dataset is empty. Please check the ticker symbol or data source.")
     if 'Close' not in data.columns:
@@ -77,6 +91,7 @@ def calculate_technical_indicators(data):
     return data
 
 def generate_volatility_heatmap(data):
+    """Generate a heatmap for daily volatility."""
     if data.empty:
         raise ValueError("No data available for generating the volatility heatmap.")
 
@@ -95,57 +110,55 @@ def generate_volatility_heatmap(data):
 # Main App Logic
 def main():
     try:
-        data = yf.download(symbol, period="1y", interval="1d")
-        if data.empty:
+        data = fetch_data(symbol)
+        if data is None or data.empty:
             st.error(f"No data found for {symbol}. Please check the ticker symbol or data source.")
             return
 
         data = calculate_technical_indicators(data)
-    except ValueError as e:
-        st.error(f"Error: {e}")
-        return
+        st.write(data.tail())
+
+        if "Bollinger Bands" in analysis_options:
+            st.subheader("Bollinger Bands")
+            try:
+                plt.figure(figsize=(12, 6))
+                plt.plot(data['Close'], label="Closing Price", color="blue")
+                plt.plot(data['SMA20'], label="20-Day SMA", color="orange")
+                plt.plot(data['Upper Band'], label="Upper Band", color="green")
+                plt.plot(data['Lower Band'], label="Lower Band", color="red")
+                plt.fill_between(data.index, data['Lower Band'], data['Upper Band'], color="gray", alpha=0.2)
+                plt.title(f"Bollinger Bands for {symbol}")
+                plt.legend()
+                st.pyplot(plt)
+            except Exception as e:
+                st.error(f"Error plotting Bollinger Bands: {e}")
+
+        if "RSI" in analysis_options:
+            st.subheader("RSI (Relative Strength Index)")
+            try:
+                plt.figure(figsize=(12, 4))
+                plt.plot(data['RSI'], label="RSI", color="purple")
+                plt.axhline(70, linestyle="--", color="red", label="Overbought (70)")
+                plt.axhline(30, linestyle="--", color="green", label="Oversold (30)")
+                plt.title(f"RSI for {symbol}")
+                plt.legend()
+                st.pyplot(plt)
+            except Exception as e:
+                st.error(f"Error plotting RSI: {e}")
+
+        if "Volatility Heatmap" in analysis_options:
+            st.subheader("Volatility Heatmap")
+            try:
+                heatmap_data = generate_volatility_heatmap(data)
+                plt.figure(figsize=(10, 6))
+                sns.heatmap(heatmap_data, cmap="coolwarm", annot=False)
+                plt.title(f"Volatility Heatmap for {symbol}")
+                st.pyplot(plt)
+            except Exception as e:
+                st.error(f"Error generating heatmap: {e}")
+
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
-        return
-
-    if "Bollinger Bands" in analysis_options:
-        st.subheader("Bollinger Bands")
-        try:
-            plt.figure(figsize=(12, 6))
-            plt.plot(data['Close'], label="Closing Price", color="blue")
-            plt.plot(data['SMA20'], label="20-Day SMA", color="orange")
-            plt.plot(data['Upper Band'], label="Upper Band", color="green")
-            plt.plot(data['Lower Band'], label="Lower Band", color="red")
-            plt.fill_between(data.index, data['Lower Band'], data['Upper Band'], color="gray", alpha=0.2)
-            plt.title(f"Bollinger Bands for {symbol}")
-            plt.legend()
-            st.pyplot(plt)
-        except Exception as e:
-            st.error(f"Error plotting Bollinger Bands: {e}")
-
-    if "RSI" in analysis_options:
-        st.subheader("RSI (Relative Strength Index)")
-        try:
-            plt.figure(figsize=(12, 4))
-            plt.plot(data['RSI'], label="RSI", color="purple")
-            plt.axhline(70, linestyle="--", color="red", label="Overbought (70)")
-            plt.axhline(30, linestyle="--", color="green", label="Oversold (30)")
-            plt.title(f"RSI for {symbol}")
-            plt.legend()
-            st.pyplot(plt)
-        except Exception as e:
-            st.error(f"Error plotting RSI: {e}")
-
-    if "Volatility Heatmap" in analysis_options:
-        st.subheader("Volatility Heatmap")
-        try:
-            heatmap_data = generate_volatility_heatmap(data)
-            plt.figure(figsize=(10, 6))
-            sns.heatmap(heatmap_data, cmap="coolwarm", annot=False)
-            plt.title(f"Volatility Heatmap for {symbol}")
-            st.pyplot(plt)
-        except Exception as e:
-            st.error(f"Error generating heatmap: {e}")
 
 # Run the app
 if st.button("Run Analysis"):
