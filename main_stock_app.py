@@ -44,7 +44,7 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Corrected function to calculate technical indicators
+# Function to calculate technical indicators
 def calculate_technical_indicators(data):
     """
     Calculates Bollinger Bands, RSI, and Volatility.
@@ -146,17 +146,21 @@ def main():
     # Enable live updates
     if live_update:
         st.subheader("Live Data Updates")
-        while True:
-            live_data = fetch_live_data(symbol)
-            if live_data:
-                st.metric(label="Live Price", value=f"${live_data['price']:.2f}")
-                st.metric(label="Volume", value=f"{live_data['volume']:,}")
-                st.metric(label="Change (%)", value=f"{live_data['change']:.2f}%")
-            else:
-                st.error("Unable to fetch live data.")
-            
-            time.sleep(refresh_interval)
-            st.experimental_rerun()
+        if 'live_data' not in st.session_state:
+            st.session_state['live_data'] = None
+
+        # Fetch live data
+        live_data = fetch_live_data(symbol)
+        if live_data:
+            st.metric(label="Live Price", value=f"${live_data['price']:.2f}")
+            st.metric(label="Volume", value=f"{live_data['volume']:,}")
+            st.metric(label="Change (%)", value=f"{live_data['change']:.2f}%")
+        else:
+            st.error("Unable to fetch live data.")
+
+        # Refresh periodically
+        time.sleep(refresh_interval)
+        st.experimental_rerun()
 
 # Run the app
 if st.button("Run Analysis"):
