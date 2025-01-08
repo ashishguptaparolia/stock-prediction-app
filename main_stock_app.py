@@ -48,11 +48,19 @@ def calculate_rsi(data, window=14):
 def calculate_technical_indicators(data):
     """
     Calculates Bollinger Bands, RSI, and Volatility.
-    Handles cases where there are insufficient data points for rolling calculations.
+    Ensures columns are properly flattened for single-level access.
     """
-    # Ensure 'Close' is a single column (Series)
-    if not isinstance(data['Close'], pd.Series):
-        data['Close'] = data['Close'].iloc[:, 0]  # Fix multi-column issue if needed
+    # Flatten multi-index columns (if applicable)
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = ['_'.join(col).strip() for col in data.columns.values]
+
+    # Ensure 'Close' column exists
+    if 'Close' not in data.columns:
+        close_col = [col for col in data.columns if 'Close' in col]
+        if close_col:
+            data['Close'] = data[close_col[0]]
+        else:
+            raise ValueError("No 'Close' column found in the data.")
 
     # Ensure there are enough rows for rolling calculations
     if len(data) < 20:
@@ -104,6 +112,10 @@ def main():
         st.error(f"No data found for {symbol}.")
         return
     
+    # Flatten columns for compatibility
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = ['_'.join(col).strip() for col in data.columns.values]
+
     # Display historical data
     st.subheader(f"Historical Data for {symbol}")
     st.write(data.tail())
