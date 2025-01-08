@@ -15,13 +15,15 @@ st.title("📈 Advanced Stock, Crypto, and Investment Insights")
 # Sidebar inputs
 st.sidebar.header("Select Parameters")
 asset_type = st.sidebar.selectbox("Asset Type", ["Stock", "Crypto"])
-symbol = st.sidebar.text_input("Ticker Symbol", "AAPL")
+symbol = st.sidebar.text_input("Ticker Symbol", "AAPL").upper()
 features = st.sidebar.multiselect("Select Features", ["Bollinger Bands", "RSI", "Sentiment Analysis"])
 
 # Fetch historical data
 def fetch_data(symbol):
     try:
         data = yf.download(symbol, start="2020-01-01", end=pd.Timestamp.now().strftime("%Y-%m-%d"))
+        if data.empty:
+            raise ValueError(f"No data found for symbol: {symbol}")
         data.reset_index(inplace=True)
         return data
     except Exception as e:
@@ -58,6 +60,8 @@ def fetch_news_sentiment(symbol):
     try:
         url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={NEWS_API_KEY}"
         response = requests.get(url)
+        if response.status_code != 200:
+            raise ValueError(f"News API error: {response.json().get('message', 'Unknown error')}")
         articles = response.json().get('articles', [])
         positive, neutral, negative = 0, 0, 0
         for article in articles:
@@ -77,12 +81,13 @@ def fetch_news_sentiment(symbol):
 def main():
     try:
         data = fetch_data(symbol)
-        if data is None or data.empty:
-            st.error(f"No data found for {symbol}. Please check the ticker symbol or data source.")
+        if data is None:
             return
 
         if "Bollinger Bands" in features or "RSI" in features:
             data = calculate_technical_indicators(data)
+            if data is None:
+                return
 
         st.subheader(f"Historical Data for {symbol}")
         st.write(data.tail())
@@ -96,6 +101,7 @@ def main():
             plt.fill_between(data['Date'], data['Lower Band'], data['Upper Band'], color='gray', alpha=0.2)
             plt.legend()
             st.pyplot(plt)
+            plt.clf()
 
         if "RSI" in features:
             st.subheader("Relative Strength Index (RSI)")
@@ -105,13 +111,15 @@ def main():
             plt.axhline(30, linestyle='--', color='green', label='Oversold (30)')
             plt.legend()
             st.pyplot(plt)
+            plt.clf()
 
         if "Sentiment Analysis" in features:
             positive, neutral, negative = fetch_news_sentiment(symbol)
-            st.subheader("News Sentiment Analysis")
-            st.write(f"Positive Articles: {positive}")
-            st.write(f"Neutral Articles: {neutral}")
-            st.write(f"Negative Articles: {negative}")
+            if positive is not None:
+                st.subheader("News Sentiment Analysis")
+                st.write(f"Positive Articles: {positive}")
+                st.write(f"Neutral Articles: {neutral}")
+                st.write(f"Negative Articles: {negative}")
 
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
