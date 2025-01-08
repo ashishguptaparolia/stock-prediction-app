@@ -11,7 +11,7 @@ import requests
 NEWS_API_KEY = "364b5eac98da4a31ac519a8d67581444"
 
 # App title
-st.set_page_config(page_title="Advanced Stock & Crypto Insights", layout="wide")
+st.set_page_config(page_title="Advanced Stock, Crypto, and Investment Insights", layout="wide")
 st.title("📈 Advanced Stock, Crypto, and Investment Insights")
 
 # Sidebar inputs
@@ -44,7 +44,8 @@ def fetch_news_sentiment(symbol):
             return positive, neutral, negative
         else:
             return None
-    except:
+    except Exception as e:
+        st.error(f"Error fetching news sentiment: {e}")
         return None
 
 def calculate_rsi(data, window=14):
@@ -75,29 +76,6 @@ def calculate_technical_indicators(data):
     data.dropna(inplace=True)
     return data
 
-def short_term_prediction(data):
-    data['Lag1'] = data['Close'].shift(1)
-    data.dropna(inplace=True)
-    X = np.array(data[['Lag1']])
-    y = np.array(data['Close'])
-    model = LinearRegression()
-    model.fit(X, y)
-    predicted_price = model.predict(X[-1].reshape(1, -1))[0]
-    return predicted_price
-
-def generate_peer_comparison(peers):
-    peer_data = {}
-    for peer in peers:
-        data = yf.download(peer, period="6mo", interval="1d")
-        if not data.empty:
-            peer_data[peer] = data['Close'].iloc[-1]
-    return peer_data
-
-def generate_seasonality(data):
-    data['Month'] = data.index.month
-    seasonality = data.groupby('Month')['Close'].mean()
-    return seasonality
-
 def generate_volatility_heatmap(data):
     if data.empty:
         raise ValueError("No data available for generating the volatility heatmap.")
@@ -107,22 +85,12 @@ def generate_volatility_heatmap(data):
         data['Day'] = data.index.day
         data['Month'] = data.index.month
 
-        if data[['Daily Change', 'Day', 'Month']].isnull().any().any():
-            raise ValueError("Missing values detected in data required for the heatmap.")
-
         heatmap_data = data.pivot_table(values='Daily Change', index='Day', columns='Month', aggfunc='mean')
         heatmap_data.fillna(0, inplace=True)
     except Exception as e:
         raise ValueError(f"An error occurred while generating the heatmap: {e}")
 
     return heatmap_data
-
-def generate_investment_calculator(data, investment_amount):
-    current_price = data['Close'].iloc[-1]
-    projected_price = short_term_prediction(data)
-    returns = (projected_price - current_price) / current_price * 100
-    potential_value = investment_amount + (investment_amount * (returns / 100))
-    return projected_price, potential_value, returns
 
 # Main App Logic
 def main():
@@ -142,40 +110,31 @@ def main():
 
     if "Bollinger Bands" in analysis_options:
         st.subheader("Bollinger Bands")
-        plt.figure(figsize=(12, 6))
-        plt.plot(data['Close'], label="Closing Price", color="blue")
-        plt.plot(data['SMA20'], label="20-Day SMA", color="orange")
-        plt.plot(data['Upper Band'], label="Upper Band", color="green")
-        plt.plot(data['Lower Band'], label="Lower Band", color="red")
-        plt.fill_between(data.index, data['Lower Band'], data['Upper Band'], color="gray", alpha=0.2)
-        plt.title(f"Bollinger Bands for {symbol}")
-        plt.legend()
-        st.pyplot(plt)
+        try:
+            plt.figure(figsize=(12, 6))
+            plt.plot(data['Close'], label="Closing Price", color="blue")
+            plt.plot(data['SMA20'], label="20-Day SMA", color="orange")
+            plt.plot(data['Upper Band'], label="Upper Band", color="green")
+            plt.plot(data['Lower Band'], label="Lower Band", color="red")
+            plt.fill_between(data.index, data['Lower Band'], data['Upper Band'], color="gray", alpha=0.2)
+            plt.title(f"Bollinger Bands for {symbol}")
+            plt.legend()
+            st.pyplot(plt)
+        except Exception as e:
+            st.error(f"Error plotting Bollinger Bands: {e}")
 
     if "RSI" in analysis_options:
         st.subheader("RSI (Relative Strength Index)")
-        plt.figure(figsize=(12, 4))
-        plt.plot(data['RSI'], label="RSI", color="purple")
-        plt.axhline(70, linestyle="--", color="red", label="Overbought (70)")
-        plt.axhline(30, linestyle="--", color="green", label="Oversold (30)")
-        plt.title(f"RSI for {symbol}")
-        plt.legend()
-        st.pyplot(plt)
-
-    if "Sentiment Analysis" in analysis_options:
-        st.subheader("News Sentiment Analysis")
-        sentiment = fetch_news_sentiment(symbol)
-        if sentiment:
-            st.write(f"Positive Articles: {sentiment[0]}")
-            st.write(f"Neutral Articles: {sentiment[1]}")
-            st.write(f"Negative Articles: {sentiment[2]}")
-        else:
-            st.error("Failed to fetch news sentiment. Please check your API key or internet connection.")
-
-    if "Seasonality Insights" in analysis_options:
-        st.subheader("Seasonality Insights")
-        seasonality = generate_seasonality(data)
-        st.bar_chart(seasonality)
+        try:
+            plt.figure(figsize=(12, 4))
+            plt.plot(data['RSI'], label="RSI", color="purple")
+            plt.axhline(70, linestyle="--", color="red", label="Overbought (70)")
+            plt.axhline(30, linestyle="--", color="green", label="Oversold (30)")
+            plt.title(f"RSI for {symbol}")
+            plt.legend()
+            st.pyplot(plt)
+        except Exception as e:
+            st.error(f"Error plotting RSI: {e}")
 
     if "Volatility Heatmap" in analysis_options:
         st.subheader("Volatility Heatmap")
@@ -185,18 +144,8 @@ def main():
             sns.heatmap(heatmap_data, cmap="coolwarm", annot=False)
             plt.title(f"Volatility Heatmap for {symbol}")
             st.pyplot(plt)
-        except ValueError as e:
-            st.error(f"Error generating heatmap: {e}")
         except Exception as e:
-            st.error(f"An unexpected error occurred: {e}")
-
-    if "Investment Calculator" in analysis_options:
-        st.subheader("Investment Calculator")
-        investment_amount = st.number_input("Enter Investment Amount ($):", min_value=100, value=1000)
-        projected_price, potential_value, returns = generate_investment_calculator(data, investment_amount)
-        st.write(f"Projected Price: ${projected_price:.2f}")
-        st.write(f"Potential Portfolio Value: ${potential_value:.2f}")
-        st.write(f"Expected Return: {returns:.2f}%")
+            st.error(f"Error generating heatmap: {e}")
 
 # Run the app
 if st.button("Run Analysis"):
